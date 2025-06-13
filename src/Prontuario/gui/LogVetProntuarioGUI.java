@@ -2,14 +2,16 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
+// src/Prontuario/gui/LogVetProntuarioGUI.java
 package Prontuario.gui;
-
 
 import Prontuario.model.Atendimento;
 import Prontuario.model.Produto;
+import Prontuario.model.Professor;
 import Prontuario.dao.AtendimentoDAO;
 import Prontuario.dao.DatabaseConnection;
 import Prontuario.dao.ProdutoDAO;
+import Prontuario.dao.ProfessorDAO;
 import Prontuario.service.GerenciadorAtendimentos;
 
 import javax.swing.*;
@@ -17,6 +19,8 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
@@ -24,18 +28,32 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
 
 public class LogVetProntuarioGUI extends JFrame {
 
     private GerenciadorAtendimentos gerenciador = new GerenciadorAtendimentos();
     private AtendimentoDAO atendimentoDAO = new AtendimentoDAO();
     private ProdutoDAO produtoDAO = new ProdutoDAO();
+    private ProfessorDAO professorDAO = new ProfessorDAO();
 
-    private final JPanel painelAtendimentos;
+    private JPanel painelAtendimentos;
     private Color verdeEscuro = new Color(0, 98, 78);
     private Color verdeClaro = new Color(198, 237, 222);
     private Color laranja = new Color(245, 123, 58);
     private Color cinzaCampo = new Color(220, 220, 220);
+
+    private JComboBox<String> comboVeterinario;
+    private DefaultComboBoxModel<String> modelVeterinario;
+
+    private CardLayout cardLayout;
+    private JPanel mainContentPanel;
+
+    private JScrollPane prontuarioPanel;
+    private LogRegistro logRegistroPanel; // Store the instance of LogRegistro
 
     public LogVetProntuarioGUI() {
         setTitle("LogVet - Prontuário");
@@ -46,35 +64,106 @@ public class LogVetProntuarioGUI extends JFrame {
         JPanel container = new JPanel(new BorderLayout());
         container.setBackground(Color.WHITE);
 
-        // TOPO
+        // TOPO (Barra de Navegação)
         JPanel topo = new JPanel(new BorderLayout());
         topo.setBackground(verdeEscuro);
         topo.setPreferredSize(new Dimension(1024, 50));
 
-        JLabel logo = new JLabel("  🐾 LogVet");
-        logo.setForeground(Color.WHITE);
-        logo.setFont(new Font("Arial", Font.BOLD, 18));
+        // --- MODIFIED SECTION START ---
+        JLabel logo;
+        try {
+            // Load the image icon from the resources
+            ImageIcon logiVetLogo = new ImageIcon(getClass().getResource("/Prontuario/imagens/logiVetName4.png"));
+            // You might want to scale the image if it's too large
+            // For example, to scale it to fit the 50px height of the bar:
+            Image image = logiVetLogo.getImage(); // transform it
+            Image scaledImage = image.getScaledInstance(-1, 40, java.awt.Image.SCALE_SMOOTH); // scale it (e.g., 40px height)
+            logiVetLogo = new ImageIcon(scaledImage); // convert it back to ImageIcon
+
+            logo = new JLabel(logiVetLogo);
+        } catch (Exception e) {
+            System.err.println("Erro ao carregar a imagem logiVetName4.png: " + e.getMessage());
+            // Fallback to text if image fails to load
+            logo = new JLabel("  🐾 LogVet");
+            logo.setForeground(Color.WHITE);
+            logo.setFont(new Font("Arial", Font.BOLD, 18));
+        }
+        // --- MODIFIED SECTION END ---
+
         topo.add(logo, BorderLayout.WEST);
 
+        // MENU DE NAVEGAÇÃO
         JPanel menuTopo = new JPanel(new FlowLayout(FlowLayout.RIGHT, 20, 12));
         menuTopo.setOpaque(false);
         String[] itens = {"MENU DE ITENS", "CONFIGURAÇÕES", "LOG", "SAIR"};
-        for (String item : itens) {
-            JLabel menuItem = new JLabel(item);
+
+        Map<String, JComponent> panels = new HashMap<>();
+        prontuarioPanel = createProntuarioPanelContent();
+        logRegistroPanel = new LogRegistro(); // Initialize LogRegistro here
+
+        panels.put("MENU DE ITENS", prontuarioPanel);
+        panels.put("LOG", logRegistroPanel);
+        panels.put("CONFIGURAÇÕES", new JPanel() {{ setBackground(Color.LIGHT_GRAY); add(new JLabel("Configurações em breve!")); }});
+
+
+        for (String itemText : itens) {
+            JLabel menuItem = new JLabel(itemText);
             menuItem.setForeground(Color.WHITE);
             menuItem.setFont(new Font("Arial", Font.BOLD, 12));
+            menuItem.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+            menuItem.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (itemText.equals("SAIR")) {
+                        System.exit(0);
+                    } else if (itemText.equals("LOG")) {
+                        logRegistroPanel.recarregarRegistros(); // Recarrega os registros ao entrar na tela de Log
+                        cardLayout.show(mainContentPanel, itemText);
+                    } else {
+                        if (panels.containsKey(itemText)) {
+                            cardLayout.show(mainContentPanel, itemText);
+                        }
+                    }
+                }
+
+                @Override
+                public void mouseEntered(MouseEvent e) {
+                    menuItem.setForeground(laranja);
+                }
+
+                @Override
+                public void mouseExited(MouseEvent e) {
+                    menuItem.setForeground(Color.WHITE);
+                }
+            });
             menuTopo.add(menuItem);
         }
         topo.add(menuTopo, BorderLayout.EAST);
         container.add(topo, BorderLayout.NORTH);
 
-        // CORPO
+        // PAINEL DE CONTEÚDO PRINCIPAL com CardLayout
+        cardLayout = new CardLayout();
+        mainContentPanel = new JPanel(cardLayout);
+        mainContentPanel.add(prontuarioPanel, "MENU DE ITENS");
+        mainContentPanel.add(logRegistroPanel, "LOG");
+        mainContentPanel.add(panels.get("CONFIGURAÇÕES"), "CONFIGURAÇÕES");
+
+
+        container.add(mainContentPanel, BorderLayout.CENTER);
+
+        add(container);
+        setVisible(true);
+
+        cardLayout.show(mainContentPanel, "MENU DE ITENS");
+    }
+
+    private JScrollPane createProntuarioPanelContent() {
         JPanel corpo = new JPanel();
         corpo.setLayout(new BoxLayout(corpo, BoxLayout.Y_AXIS));
         corpo.setBackground(Color.WHITE);
         corpo.setBorder(new EmptyBorder(15, 15, 15, 15));
 
-        // Imagem do prontuário
         try {
             ImageIcon iconeProntuario = new ImageIcon(getClass().getResource("/Prontuario/imagens/Prontuário.png"));
             JLabel imagemProntuario = new JLabel(iconeProntuario);
@@ -82,16 +171,14 @@ public class LogVetProntuarioGUI extends JFrame {
             corpo.add(imagemProntuario);
             corpo.add(Box.createRigidArea(new Dimension(0, 10)));
         } catch (Exception e) {
-            // ignore se imagem não estiver disponível
+            System.err.println("Erro ao carregar imagem Prontuário.png: " + e.getMessage());
         }
 
-        // NOVO ATENDIMENTO
         corpo.add(criarTituloSeccao("NOVO ATENDIMENTO", laranja));
         corpo.add(criarPainelNovoAtendimento());
 
         corpo.add(Box.createRigidArea(new Dimension(0, 20)));
 
-        // ATENDIMENTOS EM ANDAMENTO
         corpo.add(criarTituloSeccao("ATENDIMENTO(S) EM ANDAMENTO", laranja));
         painelAtendimentos = new JPanel();
         painelAtendimentos.setLayout(new BoxLayout(painelAtendimentos, BoxLayout.Y_AXIS));
@@ -100,13 +187,9 @@ public class LogVetProntuarioGUI extends JFrame {
 
         JScrollPane scroll = new JScrollPane(corpo);
         scroll.setBorder(null);
-        container.add(scroll, BorderLayout.CENTER);
 
-        add(container);
-        setVisible(true);
-
-        // Carregar atendimentos existentes do banco ao iniciar a GUI
         carregarAtendimentosDoBanco();
+        return scroll;
     }
 
     private JPanel criarTituloSeccao(String texto, Color corFundo) {
@@ -140,7 +223,6 @@ public class LogVetProntuarioGUI extends JFrame {
         gbc.gridy = 0;
         painel.add(labelNome, gbc);
 
-        // Usando RoundedTextField
         RoundedTextField nomeAnimal = new RoundedTextField();
         nomeAnimal.setBackground(cinzaCampo);
         gbc.gridx = 0;
@@ -153,12 +235,27 @@ public class LogVetProntuarioGUI extends JFrame {
         gbc.gridy = 0;
         painel.add(labelVet, gbc);
 
-        // Usando RoundedTextField
-        RoundedTextField veterinario = new RoundedTextField();
-        veterinario.setBackground(cinzaCampo);
+        modelVeterinario = new DefaultComboBoxModel<>();
+        comboVeterinario = new JComboBox<>(modelVeterinario);
+        comboVeterinario.setBackground(cinzaCampo);
         gbc.gridx = 1;
         gbc.gridy = 1;
-        painel.add(veterinario, gbc);
+        painel.add(comboVeterinario, gbc);
+
+        RoundedButton btnCadastrarProfessor = new RoundedButton("Cadastrar Professor");
+        btnCadastrarProfessor.setBackground(laranja);
+        btnCadastrarProfessor.setForeground(Color.WHITE);
+        btnCadastrarProfessor.setFocusPainted(false);
+        btnCadastrarProfessor.setArc(20, 20);
+        btnCadastrarProfessor.setHoverColor(laranja.brighter());
+        gbc.gridx = 1;
+        gbc.gridy = 2;
+        painel.add(btnCadastrarProfessor, gbc);
+
+        btnCadastrarProfessor.addActionListener(e -> {
+            JDialog dialog = criarDialogoCadastroProfessor();
+            dialog.setVisible(true);
+        });
 
         JLabel labelEspecie = new JLabel("Espécie do Animal");
         labelEspecie.setForeground(Color.WHITE);
@@ -172,46 +269,231 @@ public class LogVetProntuarioGUI extends JFrame {
         gbc.gridy = 1;
         painel.add(especie, gbc);
 
-        // Usando RoundedButton
         RoundedButton criar = new RoundedButton("CRIAR");
         criar.setBackground(laranja);
         criar.setForeground(Color.WHITE);
         criar.setFocusPainted(false);
-        criar.setArc(20, 20); // Mantém arredondado
-        criar.setHoverColor(laranja.brighter()); // Efeito hover
+        criar.setArc(20, 20);
+        criar.setHoverColor(laranja.brighter());
         gbc.gridx = 3;
         gbc.gridy = 1;
         painel.add(criar, gbc);
 
         criar.addActionListener(e -> {
             String nome = nomeAnimal.getText().trim();
-            String vet = veterinario.getText().trim();
+            String vet = (String) comboVeterinario.getSelectedItem();
             String esp = (String) especie.getSelectedItem();
 
-            if (nome.isEmpty() || vet.isEmpty()) {
+            if (nome.isEmpty() || vet == null || vet.isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Preencha todos os campos.");
                 return;
             }
 
             Atendimento atendimento = new Atendimento(nome, vet, esp);
 
-            // Salvar o novo atendimento no banco de dados
             int idGerado = atendimentoDAO.salvarAtendimento(atendimento);
             if (idGerado != -1) {
                 atendimento.setId(idGerado);
-                 gerenciador.adicionarAtendimento(atendimento);
+                gerenciador.adicionarAtendimento(atendimento);
                 painelAtendimentos.add(criarPainelAtendimento(atendimento));
                 painelAtendimentos.revalidate();
                 painelAtendimentos.repaint();
 
                 nomeAnimal.setText("");
-                veterinario.setText("");
             } else {
                 JOptionPane.showMessageDialog(this, "Erro ao criar atendimento no banco de dados.");
             }
         });
 
+        carregarProfessoresDoBanco();
         return painel;
+    }
+
+    private JDialog criarDialogoCadastroProfessor() {
+        JDialog dialog = new JDialog(this, "Gerenciar Professores", true); // Changed title
+        dialog.setSize(500, 300); // Increased size for better proportions
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new GridBagLayout());
+        dialog.getContentPane().setBackground(verdeEscuro);
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+
+        // Panel for adding a new professor
+        JPanel addProfessorPanel = new JPanel(new GridBagLayout());
+        addProfessorPanel.setOpaque(false); // Make it transparent to show parent background
+        addProfessorPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Color.WHITE),
+                "Cadastrar Novo Professor",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Arial", Font.BOLD, 12),
+                Color.WHITE));
+
+        JLabel lblNome = new JLabel("Nome:");
+        lblNome.setForeground(Color.WHITE);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        addProfessorPanel.add(lblNome, gbc);
+
+        RoundedTextField txtNome = new RoundedTextField();
+        txtNome.setBackground(cinzaCampo);
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        addProfessorPanel.add(txtNome, gbc);
+
+        JLabel lblEspecialidade = new JLabel("Especialidade:");
+        lblEspecialidade.setForeground(Color.WHITE);
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        addProfessorPanel.add(lblEspecialidade, gbc);
+
+        RoundedTextField txtEspecialidade = new RoundedTextField();
+        txtEspecialidade.setBackground(cinzaCampo);
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        addProfessorPanel.add(txtEspecialidade, gbc);
+
+        RoundedButton btnSalvar = new RoundedButton("Salvar");
+        btnSalvar.setBackground(laranja);
+        btnSalvar.setForeground(Color.WHITE);
+        btnSalvar.setArc(20, 20);
+        btnSalvar.setHoverColor(laranja.brighter());
+        gbc.gridx = 1;
+        gbc.gridy = 2;
+        gbc.anchor = GridBagConstraints.EAST;
+        addProfessorPanel.add(btnSalvar, gbc);
+
+        // Add the addProfessorPanel to the dialog
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 2; // Span across two columns
+        gbc.weightx = 1.0;
+        gbc.anchor = GridBagConstraints.CENTER;
+        dialog.add(addProfessorPanel, gbc);
+
+        // Panel for deleting a professor
+        JPanel deleteProfessorPanel = new JPanel(new GridBagLayout());
+        deleteProfessorPanel.setOpaque(false);
+        deleteProfessorPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Color.WHITE),
+                "Excluir Professor",
+                javax.swing.border.TitledBorder.LEFT,
+                javax.swing.border.TitledBorder.TOP,
+                new Font("Arial", Font.BOLD, 12),
+                Color.WHITE));
+
+        JLabel lblSelectProfessor = new JLabel("Selecionar Professor:");
+        lblSelectProfessor.setForeground(Color.WHITE);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        deleteProfessorPanel.add(lblSelectProfessor, gbc);
+
+        DefaultComboBoxModel<String> deleteProfModel = new DefaultComboBoxModel<>();
+        JComboBox<String> comboDeleteProfessor = new JComboBox<>(deleteProfModel);
+        comboDeleteProfessor.setBackground(cinzaCampo);
+        gbc.gridx = 1;
+        gbc.gridy = 0;
+        deleteProfessorPanel.add(comboDeleteProfessor, gbc);
+
+        RoundedButton btnExcluirProfessor = new RoundedButton("Excluir");
+        btnExcluirProfessor.setBackground(laranja);
+        btnExcluirProfessor.setForeground(Color.WHITE);
+        btnExcluirProfessor.setArc(20, 20);
+        btnExcluirProfessor.setHoverColor(laranja.brighter());
+        gbc.gridx = 1;
+        gbc.gridy = 1;
+        gbc.anchor = GridBagConstraints.EAST;
+        deleteProfessorPanel.add(btnExcluirProfessor, gbc);
+
+        // Add the deleteProfessorPanel to the dialog
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        gbc.anchor = GridBagConstraints.CENTER;
+        dialog.add(deleteProfessorPanel, gbc);
+
+        // Initial loading of professors for the delete combo box
+        Runnable loadProfessorsForDelete = () -> {
+            deleteProfModel.removeAllElements();
+            List<Professor> professors = professorDAO.buscarTodosProfessores();
+            for (Professor p : professors) {
+                deleteProfModel.addElement(p.getNome());
+            }
+        };
+        loadProfessorsForDelete.run(); // Load initially
+
+        btnSalvar.addActionListener(e -> {
+            String nome = txtNome.getText().trim();
+            String especialidade = txtEspecialidade.getText().trim();
+
+            if (nome.isEmpty() || especialidade.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Por favor, preencha todos os campos.", "Erro", JOptionPane.ERROR_MESSAGE);
+            } else {
+                Professor novoProfessor = new Professor(nome, especialidade);
+                int id = professorDAO.salvarProfessor(novoProfessor);
+                if (id != -1) {
+                    JOptionPane.showMessageDialog(dialog, "Professor cadastrado com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                    carregarProfessoresDoBanco(); // Reload main combo box
+                    loadProfessorsForDelete.run(); // Reload delete combo box
+                    txtNome.setText("");
+                    txtEspecialidade.setText("");
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Erro ao cadastrar professor.", "Erro", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        btnExcluirProfessor.addActionListener(e -> {
+            String selectedProfessorName = (String) comboDeleteProfessor.getSelectedItem();
+            if (selectedProfessorName == null || selectedProfessorName.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "Por favor, selecione um professor para excluir.", "Erro", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                    "Deseja realmente excluir o professor '" + selectedProfessorName + "'? Esta ação é irreversível.",
+                    "Confirmar Exclusão",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+
+            if (confirm == JOptionPane.YES_OPTION) {
+                Professor professorToDelete = null;
+                // Retrieve the Professor object by name to get its ID
+                List<Professor> allProfessors = professorDAO.buscarTodosProfessores();
+                for(Professor p : allProfessors) {
+                    if (p.getNome().equals(selectedProfessorName)) {
+                        professorToDelete = p;
+                        break;
+                    }
+                }
+
+                if (professorToDelete != null) {
+                    boolean deleted = professorDAO.deletarProfessor(professorToDelete.getId());
+                    if (deleted) {
+                        JOptionPane.showMessageDialog(dialog, "Professor excluído com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                        carregarProfessoresDoBanco(); // Reload main combo box
+                        loadProfessorsForDelete.run(); // Reload delete combo box
+                    } else {
+                        JOptionPane.showMessageDialog(dialog, "Erro ao excluir professor.", "Erro", JOptionPane.ERROR_MESSAGE);
+                    }
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Professor não encontrado para exclusão.", "Erro", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        return dialog;
+    }
+
+    private void carregarProfessoresDoBanco() {
+        modelVeterinario.removeAllElements();
+        List<Professor> professores = professorDAO.buscarTodosProfessores();
+        for (Professor p : professores) {
+            modelVeterinario.addElement(p.getNome());
+        }
     }
 
     private JPanel criarPainelAtendimento(Atendimento atendimento) {
@@ -228,13 +510,12 @@ public class LogVetProntuarioGUI extends JFrame {
                 + " &nbsp;&nbsp; <b>VET:</b> " + atendimento.getVeterinario()
                 + " &nbsp;&nbsp; <b>ESPÉCIE:</b> " + atendimento.getEspecie() + "</html>");
 
-        // Usando RoundedButton
         RoundedButton toggle = new RoundedButton("▼");
         toggle.setBackground(laranja);
         toggle.setForeground(Color.WHITE);
         toggle.setFocusPainted(false);
-        toggle.setArc(10, 10); // Ajuste o arredondamento do botão toggle
-        toggle.setHoverColor(laranja.brighter()); // Efeito hover
+        toggle.setArc(10, 10);
+        toggle.setHoverColor(laranja.brighter());
 
         JPanel cabecalho = new JPanel(new BorderLayout());
         cabecalho.setBackground(verdeClaro);
@@ -242,13 +523,11 @@ public class LogVetProntuarioGUI extends JFrame {
         cabecalho.add(toggle, BorderLayout.EAST);
         atendimentoPanel.add(cabecalho);
 
-        // Conteúdo do atendimento (produtos, campos)
         JPanel conteudo = new JPanel();
         conteudo.setLayout(new BoxLayout(conteudo, BoxLayout.Y_AXIS));
         conteudo.setBackground(verdeClaro);
         conteudo.setBorder(new EmptyBorder(10, 0, 10, 0));
 
-        // Lista visual de produtos
         JPanel listaProdutos = new JPanel();
         listaProdutos.setLayout(new BoxLayout(listaProdutos, BoxLayout.Y_AXIS));
         listaProdutos.setBackground(verdeClaro);
@@ -259,12 +538,10 @@ public class LogVetProntuarioGUI extends JFrame {
         scrollProdutos.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         conteudo.add(scrollProdutos);
 
-        // Adicionar produtos existentes do atendimento (se carregado do banco)
         for (Produto p : atendimento.getProdutos()) {
             adicionarProdutoAoPainel(p, atendimento, listaProdutos);
         }
 
-        // Campos para adicionar produto
         JPanel adicionar = new JPanel(new FlowLayout(FlowLayout.LEFT));
         adicionar.setBackground(verdeClaro);
 
@@ -275,14 +552,12 @@ public class LogVetProntuarioGUI extends JFrame {
         }
         JComboBox<String> comboProdutos = new JComboBox<>(comboModel);
 
-        // Usando RoundedTextField
         RoundedTextField campoQuant = new RoundedTextField("1", 3);
-        campoQuant.setArc(10, 10); // Ajuste o arredondamento do campo de quantidade
+        campoQuant.setArc(10, 10);
 
-        // Usando RoundedButton
         RoundedButton btnAdd = new RoundedButton("ADICIONAR");
-        btnAdd.setArc(10, 10); // Ajuste o arredondamento do botão adicionar
-        btnAdd.setHoverColor(laranja.brighter()); // Efeito hover
+        btnAdd.setArc(10, 10);
+        btnAdd.setHoverColor(laranja.brighter());
 
         adicionar.add(new JLabel("Produto:"));
         adicionar.add(comboProdutos);
@@ -296,7 +571,6 @@ public class LogVetProntuarioGUI extends JFrame {
                 return;
             }
             String selectedItemDisplay = (String) comboProdutos.getSelectedItem();
-            // Extrai o nome do produto da string de exibição do ComboBox
             String nomeProduto = selectedItemDisplay.substring(0, selectedItemDisplay.indexOf(" (Estoque:"));
 
             int quant;
@@ -315,7 +589,6 @@ public class LogVetProntuarioGUI extends JFrame {
                 return;
             }
 
-            // Criar um objeto Produto para o atendimento (com o ID do produto do estoque)
             Produto produtoParaAdicionar = new Produto(produtoNoEstoque.getId(), produtoNoEstoque.getCodigoBarras(), produtoNoEstoque.getNome(), quant);
 
             Optional<Produto> produtoExistenteNoAtendimento = atendimento.getProdutos().stream()
@@ -325,21 +598,18 @@ public class LogVetProntuarioGUI extends JFrame {
             if (produtoExistenteNoAtendimento.isPresent()) {
                 Produto pExistente = produtoExistenteNoAtendimento.get();
                 pExistente.setQuantidade(pExistente.getQuantidade() + quant);
-                // Atualiza na tabela produtos_atendimentos
                 produtoDAO.atualizarItemAtendimento(atendimento.getId(), pExistente.getId(), pExistente.getQuantidade());
                 atualizarPainelProduto(listaProdutos, pExistente);
             } else {
                 atendimento.adicionarProduto(produtoParaAdicionar);
                 try {
-                    // Salva na tabela produtos_atendimentos
-                    produtoDAO.salvarItemAtendimento(DatabaseConnection.getConnection(), atendimento.getId(), produtoParaAdicionar.getId(), quant); // Passa a conexão
+                    produtoDAO.salvarItemAtendimento(DatabaseConnection.getConnection(), atendimento.getId(), produtoParaAdicionar.getId(), quant);
                 } catch (SQLException ex) {
                     Logger.getLogger(LogVetProntuarioGUI.class.getName()).log(Level.SEVERE, null, ex);
                 }
                 adicionarProdutoAoPainel(produtoParaAdicionar, atendimento, listaProdutos);
             }
 
-            // Atualizar estoque no banco e na GUI
             produtoDAO.atualizarEstoqueProduto(nomeProduto, -quant);
             recarregarTodosCombosProdutos();
 
@@ -347,21 +617,19 @@ public class LogVetProntuarioGUI extends JFrame {
             listaProdutos.repaint();
         });
 
-        // Botões de ação
         JPanel botoes = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         botoes.setBackground(verdeClaro);
 
-        // Usando RoundedButton
         RoundedButton finalizar = new RoundedButton("FINALIZAR ATENDIMENTO");
         RoundedButton cancelar = new RoundedButton("CANCELAR ATENDIMENTO");
         finalizar.setBackground(laranja);
         finalizar.setForeground(Color.WHITE);
         cancelar.setBackground(laranja);
         cancelar.setForeground(Color.WHITE);
-        finalizar.setArc(20, 20); // Ajuste o arredondamento
-        cancelar.setArc(20, 20); // Ajuste o arredondamento
-        finalizar.setHoverColor(laranja.brighter()); // Efeito hover
-        cancelar.setHoverColor(laranja.brighter()); // Efeito hover
+        finalizar.setArc(20, 20);
+        cancelar.setArc(20, 20);
+        finalizar.setHoverColor(laranja.brighter());
+        cancelar.setHoverColor(laranja.brighter());
 
         botoes.add(cancelar);
         botoes.add(finalizar);
@@ -373,24 +641,22 @@ public class LogVetProntuarioGUI extends JFrame {
                     "Confirmar Cancelamento",
                     JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                // Devolver produtos ao estoque
                 for (Produto p : atendimento.getProdutos()) {
                     produtoDAO.atualizarEstoqueProduto(p.getNome(), p.getQuantidade());
                 }
-                atendimentoDAO.removerAtendimento(atendimento.getId()); // Remove do banco
+                atendimentoDAO.removerAtendimento(atendimento.getId());
                 gerenciador.removerAtendimento(atendimento);
                 painelAtendimentos.remove(atendimentoPanel);
                 painelAtendimentos.revalidate();
                 painelAtendimentos.repaint();
-                recarregarTodosCombosProdutos(); // Atualiza todos os combos de produto abertos
+                recarregarTodosCombosProdutos();
             }
         });
 
         finalizar.addActionListener(e -> {
-            // VERIFICAÇÃO ADICIONADA AQUI
             if (atendimento.getProdutos().isEmpty()) {
                 JOptionPane.showMessageDialog(this, "Não é possível finalizar um prontuário sem nenhum produto adicionado.");
-                return; // Impede a finalização se não houver produtos
+                return;
             }
 
             int confirm = JOptionPane.showConfirmDialog(this,
@@ -398,15 +664,44 @@ public class LogVetProntuarioGUI extends JFrame {
                     "Confirmar Finalização",
                     JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
-                JOptionPane.showMessageDialog(this, "Atendimento finalizado.");
-                // Não é necessário devolver produtos ao estoque, pois já foram descontados
-                // O atendimento será removido do painel e do banco (considerando que atendimentos finalizados não ficam 'em andamento')
-                atendimentoDAO.removerAtendimento(atendimento.getId()); // Remove do banco (ou altere o status para 'finalizado' e mova para uma tela de histórico)
+                StringBuilder produtosLog = new StringBuilder();
+                for (int i = 0; i < atendimento.getProdutos().size(); i++) {
+                    Produto p = atendimento.getProdutos().get(i);
+                    produtosLog.append(p.getNome()).append(" - ").append(p.getQuantidade());
+                    if (i < atendimento.getProdutos().size() - 1) {
+                        produtosLog.append(";");
+                    }
+                }
+
+                LocalDate data = LocalDate.now();
+                LocalTime horario = LocalTime.now();
+                String dataStr = data.toString();
+                String horarioStr = horario.format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+
+                String responsavel = ""; // TODO: Implement how to get 'responsavel' if needed
+
+                atendimentoDAO.salvarLogRegistro(
+                    dataStr,
+                    horarioStr,
+                    atendimento.getVeterinario(),
+                    atendimento.getNomeAnimal(),
+                    atendimento.getEspecie(),
+                    responsavel,
+                    produtosLog.toString()
+                );
+
+                JOptionPane.showMessageDialog(this, "Atendimento finalizado e registrado no log.");
+                atendimentoDAO.removerAtendimento(atendimento.getId());
                 gerenciador.removerAtendimento(atendimento);
                 painelAtendimentos.remove(atendimentoPanel);
                 painelAtendimentos.revalidate();
                 painelAtendimentos.repaint();
-                recarregarTodosCombosProdutos(); // Atualiza todos os combos de produto abertos
+                recarregarTodosCombosProdutos();
+
+                // CHAMADA PARA ATUALIZAR O PAINEL DE LOG AQUI!
+                if (logRegistroPanel != null) {
+                    logRegistroPanel.recarregarRegistros();
+                }
             }
         });
 
@@ -423,31 +718,25 @@ public class LogVetProntuarioGUI extends JFrame {
     private void adicionarProdutoAoPainel(Produto p, Atendimento atendimento, JPanel listaProdutos) {
         JPanel linhaProduto = new JPanel(new FlowLayout(FlowLayout.LEFT));
         linhaProduto.setBackground(verdeClaro);
-        JLabel labelItem = new JLabel(p.toString()); // Usa o toString de Produto
+        JLabel labelItem = new JLabel(p.toString());
 
-        // Revertendo para JButton padrão para botões de ícone
         JButton btnMais = new JButton(new ImageIcon(getClass().getResource("/Prontuario/imagens/mais.png")));
         JButton btnMenos = new JButton(new ImageIcon(getClass().getResource("/Prontuario/imagens/menos.png")));
         JButton btnExcluir = new JButton(new ImageIcon(getClass().getResource("/Prontuario/imagens/lixeira.png")));
 
-        // Aplicar propriedades para deixar sem a parte branca e com a sensação de clique
         for (JButton btn : new JButton[]{btnMais, btnMenos, btnExcluir}) {
-            btn.setContentAreaFilled(false); // Remove o preenchimento da área do botão
-            btn.setBorderPainted(false);      // Remove a borda padrão do botão
-            btn.setFocusPainted(false);      // Remove o foco pintado ao clicar
-            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); // Cursor de mão
+            btn.setContentAreaFilled(false);
+            btn.setBorderPainted(false);
+            btn.setFocusPainted(false);
+            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
-            // Adicionar efeito hover manual para estes botões padrão
-            Color originalBg = btn.getBackground(); // Pode não ter efeito visual real se contentAreaFilled for false
             btn.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mouseEntered(java.awt.event.MouseEvent evt) {
-
                 }
 
                 @Override
                 public void mouseExited(java.awt.event.MouseEvent evt) {
-                    // Voltar ao normal
                 }
             });
         }
@@ -514,7 +803,6 @@ public class LogVetProntuarioGUI extends JFrame {
                 for (Component subComp : linhaProduto.getComponents()) {
                     if (subComp instanceof JLabel) {
                         JLabel labelItem = (JLabel) subComp;
-                        // O label agora começa com o nome do produto
                         if (labelItem.getText().startsWith(produtoAtualizado.getNome())) {
                             labelItem.setText(produtoAtualizado.toString());
                             return;

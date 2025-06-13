@@ -2,28 +2,33 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
+/*
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ */
 package Prontuario.model;
 
-
-
-
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-
+/**
+ *
+ * @author João Pedro
+ */
 public class Atendimento {
-    private int id; // ID gerado pelo banco de dados (tabela atendimentos)
+    private int id;
     private String nomeAnimal;
-    private String veterinario; // Mapeia para 'professor' na tabela
+    private String veterinario; // Mantido como 'veterinario' no modelo para corresponder a getVeterinario() na GUI
     private String especie;
-    private List<Produto> produtos; // Produtos associados a este atendimento
+    private List<Produto> produtos;
 
-    // Construtor para novos atendimentos (sem ID inicial, será gerado pelo banco)
+    // Construtor para novos atendimentos
     public Atendimento(String nomeAnimal, String veterinario, String especie) {
         this.nomeAnimal = nomeAnimal;
         this.veterinario = veterinario;
         this.especie = especie;
-        this.produtos = new ArrayList<>();
+        this.produtos = new ArrayList<>(); // Inicializa como ArrayList modificável
     }
 
     // Construtor para atendimentos carregados do banco (com ID)
@@ -32,15 +37,12 @@ public class Atendimento {
         this.nomeAnimal = nomeAnimal;
         this.veterinario = veterinario;
         this.especie = especie;
-        this.produtos = new ArrayList<>();
+        this.produtos = new ArrayList<>(); // Inicializa como ArrayList modificável
     }
 
+    // Getters
     public int getId() {
         return id;
-    }
-
-    public void setId(int id) {
-        this.id = id;
     }
 
     public String getNomeAnimal() {
@@ -59,10 +61,34 @@ public class Atendimento {
         return produtos;
     }
 
+    // Setters
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public void setNomeAnimal(String nomeAnimal) {
+        this.nomeAnimal = nomeAnimal;
+    }
+
+    public void setVeterinario(String veterinario) {
+        this.veterinario = veterinario;
+    }
+
+    public void setEspecie(String especie) {
+        this.especie = especie;
+    }
+
+    // Setter para a lista de produtos (corrigido para ser modificável)
+    public void setProdutos(List<Produto> produtos) {
+        // Limpa a lista existente e adiciona todos os produtos da nova lista
+        this.produtos.clear(); // Limpa produtos existentes
+        this.produtos.addAll(produtos); // Adiciona todos os produtos da lista fornecida
+    }
+
+    // Métodos para gerenciar produtos individualmente
     public void adicionarProduto(Produto novo) {
         for (Produto p : produtos) {
-            // Se o produto já existe no atendimento (baseado no nome do produto)
-            if (p.getNome().equals(novo.getNome())) { 
+            if (p.getNome().equals(novo.getNome())) {
                 p.setQuantidade(p.getQuantidade() + novo.getQuantidade());
                 return;
             }
@@ -71,7 +97,6 @@ public class Atendimento {
     }
 
     public void removerProduto(Produto produto) {
-        // Remove o produto da lista do atendimento baseado no nome
         produtos.removeIf(p -> p.getNome().equals(produto.getNome()));
     }
 }
